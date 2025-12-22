@@ -3,7 +3,7 @@ Xmmersia HubCore - Foundation for all Xmmersia Hubs
 """
 
 from .base_hub import BaseHub
-from .config import HubConfig, SkillExposure, HubAction, AuthConfig, ConsentConfig
+from .config import HubConfig, SkillExposure, HubAction, AuthConfig, ConsentConfig, UITheme
 from .router import HubRouter
 from .auth import AuthManager
 from .consent import ConsentManager
@@ -16,6 +16,7 @@ __all__ = [
     "HubAction",
     "AuthConfig",
     "ConsentConfig",
+    "UITheme",
     "HubRouter",
     "AuthManager",
     "ConsentManager"

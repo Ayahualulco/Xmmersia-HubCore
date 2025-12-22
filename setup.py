@@ -22,8 +22,7 @@ setup(
     author="Marc Santugini",
     author_email="marc@xmmersia.com",
     description="Foundation for all Xmmersia Hubs - unified interfaces for agent collaboration",
-    long_description=open("README.md").read(),
-    long_description_content_type="text/markdown",
+    long_description=open("README.md", encoding="utf-8").read(),
     url="https://github.com/Ayahualulco/Xmmersia-HubCore",
     classifiers=[
         "Development Status :: 4 - Beta",
