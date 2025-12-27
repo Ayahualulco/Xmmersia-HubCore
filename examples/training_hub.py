@@ -1,8 +1,8 @@
 """
-Practice Hub - First Xmmersia Hub Implementation
+Training Hub - First Xmmersia Hub Implementation
 
 This is a complete example of implementing a Hub using HubCore.
-The Practice Hub provides personalized derivative practice for ECON 3010 students.
+The Training Hub provides personalized derivative training for ECON 3010 students.
 """
 
 from hubcore import (
@@ -22,12 +22,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class PracticeHub(BaseHub):
+class TrainingHub(BaseHub):
     """
-    Practice Hub - Personalized derivative practice for ECON 3010.
+    Training Hub - Personalized derivative training for ECON 3010.
     
     Agents:
-    - GASTON (Conductor): Orchestrates practice, shows progress
+    - GASTON (Conductor): Orchestrates training, shows progress
     - LUMIÈRE (Specialist): Grades submissions
     - Le Marteau (Background): Generates worksheets
     - Le Veilleur (Background): Tracks progress, manages storage
@@ -45,9 +45,9 @@ class PracticeHub(BaseHub):
     
     def configure(self) -> HubConfig:
         return HubConfig(
-            name="Practice Hub",
-            slug="practice",
-            description="Personalized derivative practice for ECON 3010",
+            name="Training Hub",
+            slug="training",
+            description="Personalized derivative training for ECON 3010",
             version="1.0.0",
             auth_required=True,
             consent_required=True,
@@ -59,7 +59,7 @@ class PracticeHub(BaseHub):
         )
     
     def register_agents(self) -> Dict[str, str]:
-        """Register the 4 Practice Hub agents"""
+        """Register the 4 Training Hub agents"""
         return {
             "gaston": "http://localhost:8020",
             "lumiere": "http://localhost:8021",
@@ -68,7 +68,7 @@ class PracticeHub(BaseHub):
         }
     
     def define_skill_exposure(self) -> Dict[str, SkillExposure]:
-        """Define which skills are exposed in Practice Hub"""
+        """Define which skills are exposed in Training Hub"""
         return {
             "gaston": SkillExposure(
                 exposed=["request_worksheet", "get_progress", "download_work"],
@@ -101,7 +101,7 @@ class PracticeHub(BaseHub):
         }
     
     def define_ui_actions(self) -> List[HubAction]:
-        """Define the user-facing actions for Practice Hub"""
+        """Define the user-facing actions for Training Hub"""
         return [
             # GASTON actions
             HubAction(
@@ -110,7 +110,7 @@ class PracticeHub(BaseHub):
                 icon="📝",
                 agent="gaston",
                 skill="request_worksheet",
-                description="Get personalized practice problems based on your weak areas",
+                description="Get personalized training problems based on your weak areas",
                 primary=True,
                 position=1,
                 group="gaston"
@@ -160,21 +160,21 @@ class PracticeHub(BaseHub):
         )
     
     def configure_consent(self) -> ConsentConfig:
-        """Configure consent for Practice Hub"""
+        """Configure consent for Training Hub"""
         return ConsentConfig(
             required=True,
-            title="Practice Hub Consent",
+            title="Training Hub Consent",
             text="""
 This optional tool uses AI to:
-• Generate personalized practice problems
+• Generate personalized training problems
 • Grade your work and provide feedback
 • Track your progress over time
 
 Your data is stored securely in UVA Box.
-This is OPTIONAL practice — not required for your grade.
+This is OPTIONAL training — not required for your grade.
             """.strip(),
             data_usage=[
-                "Generate personalized practice problems",
+                "Generate personalized training problems",
                 "Grade submissions and provide feedback",
                 "Track progress over time"
             ],
@@ -193,7 +193,7 @@ This is OPTIONAL practice — not required for your grade.
     
     async def on_initialize(self):
         """Called after hub initialization"""
-        logger.info("Practice Hub initialized")
+        logger.info("Training Hub initialized")
         logger.info(f"Course: {self.config.course}")
         logger.info(f"Semester: {self.config.semester}")
     
@@ -229,18 +229,18 @@ This is OPTIONAL practice — not required for your grade.
 # ─────────────────────────────────────────────────────────────
 
 async def main():
-    """Run Practice Hub as standalone server"""
+    """Run Training Hub as standalone server"""
     from fastapi import FastAPI
     import uvicorn
     
     # Create hub
-    hub = PracticeHub()
+    hub = TrainingHub()
     await hub.initialize()
     
     # Create FastAPI app
     app = FastAPI(
-        title="Practice Hub",
-        description="Personalized derivative practice for ECON 3010",
+        title="Training Hub",
+        description="Personalized derivative training for ECON 3010",
         version="1.0.0"
     )
     
@@ -252,7 +252,7 @@ async def main():
     # Health check at root
     @app.get("/")
     async def root():
-        return {"hub": "Practice Hub", "status": "running"}
+        return {"hub": "Training Hub", "status": "running"}
     
     # Run server
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")

@@ -1,0 +1,2536 @@
+============================================================
+REPOSITORY: Xmmersia-HubCore
+GENERATED: 2025-12-26 23:08:17
+FILES: 14
+TOTAL LINES: 2,426
+TOTAL SIZE: 0.08 MB
+GITIGNORE: Yes
+============================================================
+
+TABLE OF CONTENTS:
+============================================================
+   1. LICENSE (22 lines)
+   2. README.md (307 lines)
+   3. examples\practice_hub.py (266 lines)
+   4. hubcore\__init__.py (24 lines)
+   5. hubcore\auth.py (213 lines)
+   6. hubcore\base_hub.py (411 lines)
+   7. hubcore\config.py (191 lines)
+   8. hubcore\consent.py (187 lines)
+   9. hubcore\handlers\__init__.py (9 lines)
+  10. hubcore\handlers\hub_handler.py (293 lines)
+  11. hubcore\router.py (263 lines)
+  12. requirements.txt (16 lines)
+  13. setup.py (37 lines)
+  14. tests\test_base_hub.py (187 lines)
+============================================================
+
+
+============================================================
+FILE 1/14: LICENSE
+LINES: 22
+============================================================
+
+MIT License
+
+Copyright (c) 2025 Xmmersia / Marc Santugini
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+============================================================
+FILE 2/14: README.md
+LINES: 307
+============================================================
+
+# Xmmersia-HubCore
+
+The foundation for all Xmmersia Hubs. HubCore defines how multiple agents collaborate through a unified interface, exposing curated skills while keeping agents complete and independent.
+
+## What is HubCore?
+
+A **Hub** is a unified interface that brings together multiple Mates (agents) to serve a specific domain. HubCore provides:
+
+- **BaseHub**: Abstract class all hubs inherit from
+- **SkillExposure**: Patterns for exposing/hiding agent skills
+- **AuthFlow**: Authentication and consent management
+- **HubRouter**: Routes user actions to appropriate agents
+- **HubConfig**: Configuration for hub behavior
+
+## Key Concept: Agents vs Hubs
+
+**Agents are complete beings** with full capabilities defined in their agent cards:
+- LUMIÈRE has OCR, rubric grading, answer checking, PDF annotation
+- GASTON has chatbot, progress queries, worksheet orchestration
+
+**Hubs expose a curated subset** of agent skills:
+- Practice Hub exposes LUMIÈRE's `check_answers` but not `rubric_grade`
+- Practice Hub uses GASTON's chatbot internally but hides the chat interface
+- Same agents, different hubs, different skill exposure
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AGENT SKILLS vs HUB EXPOSURE                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  GASTON (Full Agent)         │  GASTON in Practice Hub          │
+│  ├── chatbot ✓               │  ├── request_worksheet ✅        │
+│  ├── request_worksheet ✓     │  ├── get_progress ✅             │
+│  ├── get_progress ✓          │  ├── download_work ✅            │
+│  └── download_work ✓         │  └── chatbot ❌ (internal only)  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Installation
+
+```bash
+pip install xmmersia-hubcore
+```
+
+## Quick Start
+
+### Creating Your First Hub
+
+```python
+from hubcore import BaseHub, HubConfig, SkillExposure
+
+class PracticeHub(BaseHub):
+    
+    def configure(self) -> HubConfig:
+        return HubConfig(
+            name="Practice Hub",
+            slug="practice",
+            description="Personalized derivative practice for ECON 3010",
+            version="1.0.0"
+        )
+    
+    def register_agents(self):
+        return {
+            "gaston": "http://localhost:8020",
+            "lumiere": "http://localhost:8021",
+            "le_marteau": "http://localhost:8022",
+            "le_veilleur": "http://localhost:8023"
+        }
+    
+    def define_skill_exposure(self) -> dict:
+        return {
+            "gaston": SkillExposure(
+                exposed=["request_worksheet", "get_progress", "download_work"],
+                hidden=["chatbot"],  # Used internally, not in UI
+                internal=["chatbot"]  # Can still be called by hub logic
+            ),
+            "lumiere": SkillExposure(
+                exposed=["check_answers"],
+                hidden=["rubric_grade", "ocr_extract", "annotate_pdf"]
+            ),
+            "le_marteau": SkillExposure(
+                exposed=[],  # Background agent, no direct exposure
+                hidden=["generate_worksheet", "adapt_difficulty", "render_pdf"]
+            ),
+            "le_veilleur": SkillExposure(
+                exposed=[],  # Background agent
+                hidden=["create_profile", "log_session", "log_result", 
+                        "get_progress", "check_pending", "get_student_data"]
+            )
+        }
+    
+    def define_ui_actions(self) -> list:
+        """Define what users see in the Hub UI"""
+        return [
+            HubAction(
+                id="generate_worksheet",
+                label="Generate New Worksheet",
+                icon="📝",
+                agent="gaston",
+                skill="request_worksheet"
+            ),
+            HubAction(
+                id="view_progress",
+                label="View My Progress",
+                icon="📊",
+                agent="gaston",
+                skill="get_progress"
+            ),
+            HubAction(
+                id="download_work",
+                label="Download All My Work",
+                icon="📥",
+                agent="gaston",
+                skill="download_work"
+            ),
+            HubAction(
+                id="submit_work",
+                label="Submit & Grade",
+                icon="💡",
+                agent="lumiere",
+                skill="check_answers",
+                precondition="check_pending"  # Must have pending worksheet
+            )
+        ]
+
+# Run the hub
+import asyncio
+
+async def main():
+    hub = PracticeHub()
+    await hub.initialize()
+    # Hub is now ready to serve at configured URL
+
+asyncio.run(main())
+```
+
+## Core Components
+
+### BaseHub
+
+Abstract base class all hubs inherit from:
+
+```python
+class BaseHub(ABC):
+    @abstractmethod
+    def configure(self) -> HubConfig: pass
+    
+    @abstractmethod
+    def register_agents(self) -> dict: pass
+    
+    @abstractmethod
+    def define_skill_exposure(self) -> dict: pass
+    
+    @abstractmethod
+    def define_ui_actions(self) -> list: pass
+    
+    async def initialize(self): pass
+    async def handle_action(self, action_id, user, params): pass
+    async def check_auth(self, user): pass
+    async def check_consent(self, user): pass
+```
+
+### HubConfig
+
+Configuration for hub behavior:
+
+```python
+@dataclass
+class HubConfig:
+    name: str                    # "Practice Hub"
+    slug: str                    # "practice" -> xmmersia.com/practice
+    description: str             # Shown to users
+    version: str                 # Semantic version
+    auth_required: bool = True   # Require login?
+    consent_required: bool = True # Require consent form?
+    theme: str = "organic"       # UI theme
+```
+
+### SkillExposure
+
+Define which skills are visible/hidden:
+
+```python
+@dataclass
+class SkillExposure:
+    exposed: list[str]    # Shown in UI, callable by users
+    hidden: list[str]     # Not shown, but agent has them
+    internal: list[str]   # Can be called by hub logic, not users
+```
+
+### HubAction
+
+A user-facing action in the Hub UI:
+
+```python
+@dataclass
+class HubAction:
+    id: str              # Unique identifier
+    label: str           # "Generate New Worksheet"
+    icon: str            # Emoji or icon class
+    agent: str           # Which agent handles this
+    skill: str           # Which skill to invoke
+    precondition: str = None  # Optional check before allowing
+```
+
+## Authentication & Consent
+
+HubCore provides built-in patterns for auth and consent:
+
+```python
+class PracticeHub(BaseHub):
+    
+    def configure_auth(self) -> AuthConfig:
+        return AuthConfig(
+            method="magic_link",
+            email_domain="virginia.edu",
+            session_duration_hours=24
+        )
+    
+    def configure_consent(self) -> ConsentConfig:
+        return ConsentConfig(
+            required=True,
+            text="This optional tool uses AI to generate practice problems...",
+            data_usage=["OpenAI for grading", "UVA Box for storage"],
+            revocable=True
+        )
+```
+
+## Hub Lifecycle
+
+```
+1. User visits xmmersia.com/{hub-slug}
+2. Hub checks authentication
+   └── Not logged in? → Show login modal
+3. Hub checks consent
+   └── No consent? → Show consent form
+4. Hub displays UI with available actions
+5. User clicks action
+6. Hub routes to appropriate agent via A2A
+7. Agent processes and returns result
+8. Hub displays result to user
+```
+
+## Directory Structure
+
+```
+Xmmersia-HubCore/
+├── hubcore/
+│   ├── __init__.py
+│   ├── base_hub.py          # BaseHub abstract class
+│   ├── config.py            # HubConfig, SkillExposure, HubAction
+│   ├── router.py            # Routes actions to agents
+│   ├── auth.py              # Authentication helpers
+│   ├── consent.py           # Consent management
+│   └── handlers/
+│       ├── __init__.py
+│       └── hub_handler.py   # HTTP handler for hub endpoints
+├── examples/
+│   └── practice_hub.py      # Practice Hub implementation
+├── tests/
+│   ├── test_base_hub.py
+│   ├── test_skill_exposure.py
+│   └── test_router.py
+├── requirements.txt
+├── setup.py
+└── README.md
+```
+
+## Requirements
+
+- Python >= 3.10
+- xmmersia-agentcore >= 1.0.0
+- xmmersia-protocol >= 0.2.5
+- FastAPI (for hub server)
+- httpx (for A2A client calls)
+
+## Success Criteria
+
+HubCore is successful when:
+1. ✅ Practice Hub successfully uses it
+2. ✅ New hubs can be created in hours, not days
+3. ✅ Skill exposure works correctly (hidden skills stay hidden)
+4. ✅ Auth and consent flows work seamlessly
+5. ✅ Same agents can serve multiple hubs with different exposures
+
+## Relationship to Other Components
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     XMMERSIA STACK                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  HubCore        →  Unified interfaces (Practice Hub, etc.)      │
+│       ↓                                                         │
+│  AgentCore      →  Agent patterns (BaseAgent, BaseSkill)        │
+│       ↓                                                         │
+│  A2A Protocol   →  Agent communication (JSON-RPC, tasks)        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+*HubCore — Unified interfaces for the Xmmersia ecosystem*  
+*"Every student can grow with the right guidance"*
+
+
+============================================================
+FILE 3/14: examples\practice_hub.py
+LINES: 266
+============================================================
+
+"""
+Practice Hub - First Xmmersia Hub Implementation
+
+This is a complete example of implementing a Hub using HubCore.
+The Practice Hub provides personalized derivative practice for ECON 3010 students.
+"""
+
+from hubcore import (
+    BaseHub,
+    HubConfig,
+    SkillExposure,
+    HubAction,
+    AuthConfig,
+    ConsentConfig,
+    UITheme
+)
+from hubcore.handlers import create_hub_app
+
+from typing import Dict, List
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class PracticeHub(BaseHub):
+    """
+    Practice Hub - Personalized derivative practice for ECON 3010.
+    
+    Agents:
+    - GASTON (Conductor): Orchestrates practice, shows progress
+    - LUMIÈRE (Specialist): Grades submissions
+    - Le Marteau (Background): Generates worksheets
+    - Le Veilleur (Background): Tracks progress, manages storage
+    
+    Skills exposed to users:
+    - GASTON: request_worksheet, get_progress, download_work
+    - LUMIÈRE: check_answers
+    
+    Skills hidden (but available):
+    - GASTON: chatbot (used internally)
+    - LUMIÈRE: rubric_grade, ocr_extract, annotate_pdf
+    - Le Marteau: all (background only)
+    - Le Veilleur: all (background only)
+    """
+    
+    def configure(self) -> HubConfig:
+        return HubConfig(
+            name="Practice Hub",
+            slug="practice",
+            description="Personalized derivative practice for ECON 3010",
+            version="1.0.0",
+            auth_required=True,
+            consent_required=True,
+            theme=UITheme.ORGANIC,
+            tagline="Every student can grow with the right guidance",
+            icon="🎓",
+            course="ECON 3010",
+            semester="26Sp"
+        )
+    
+    def register_agents(self) -> Dict[str, str]:
+        """Register the 4 Practice Hub agents"""
+        return {
+            "gaston": "http://localhost:8020",
+            "lumiere": "http://localhost:8021",
+            "le_marteau": "http://localhost:8022",
+            "le_veilleur": "http://localhost:8023"
+        }
+    
+    def define_skill_exposure(self) -> Dict[str, SkillExposure]:
+        """Define which skills are exposed in Practice Hub"""
+        return {
+            "gaston": SkillExposure(
+                exposed=["request_worksheet", "get_progress", "download_work"],
+                hidden=[],
+                internal=["chatbot"]  # Hub can use chatbot internally
+            ),
+            "lumiere": SkillExposure(
+                exposed=["check_answers"],
+                hidden=["rubric_grade", "annotate_pdf"],
+                internal=["ocr_extract"]  # Used internally by check_answers
+            ),
+            "le_marteau": SkillExposure(
+                exposed=[],  # Background agent
+                hidden=[],
+                internal=["generate_worksheet", "adapt_difficulty", "render_pdf"]
+            ),
+            "le_veilleur": SkillExposure(
+                exposed=[],  # Background agent
+                hidden=[],
+                internal=[
+                    "create_profile",
+                    "log_session", 
+                    "log_result",
+                    "get_progress",
+                    "check_pending",
+                    "get_student_data",
+                    "get_class_overview"
+                ]
+            )
+        }
+    
+    def define_ui_actions(self) -> List[HubAction]:
+        """Define the user-facing actions for Practice Hub"""
+        return [
+            # GASTON actions
+            HubAction(
+                id="generate_worksheet",
+                label="Generate New Worksheet",
+                icon="📝",
+                agent="gaston",
+                skill="request_worksheet",
+                description="Get personalized practice problems based on your weak areas",
+                primary=True,
+                position=1,
+                group="gaston"
+            ),
+            HubAction(
+                id="view_progress",
+                label="View My Progress",
+                icon="📊",
+                agent="gaston",
+                skill="get_progress",
+                description="See how you're doing (same view as TAs)",
+                position=2,
+                group="gaston"
+            ),
+            HubAction(
+                id="download_work",
+                label="Download All My Work",
+                icon="📥",
+                agent="gaston",
+                skill="download_work",
+                description="Download all your worksheets and reports",
+                position=3,
+                group="gaston"
+            ),
+            
+            # LUMIÈRE actions
+            HubAction(
+                id="submit_work",
+                label="Submit & Grade",
+                icon="💡",
+                agent="lumiere",
+                skill="check_answers",
+                description="Upload your completed worksheet for instant feedback",
+                precondition="le_veilleur.check_pending",  # Must have pending worksheet
+                primary=True,
+                position=1,
+                group="lumiere"
+            )
+        ]
+    
+    def configure_auth(self) -> AuthConfig:
+        """Configure UVA email authentication"""
+        return AuthConfig(
+            method="magic_link",
+            email_domain="virginia.edu",
+            session_duration_hours=24
+        )
+    
+    def configure_consent(self) -> ConsentConfig:
+        """Configure consent for Practice Hub"""
+        return ConsentConfig(
+            required=True,
+            title="Practice Hub Consent",
+            text="""
+This optional tool uses AI to:
+• Generate personalized practice problems
+• Grade your work and provide feedback
+• Track your progress over time
+
+Your data is stored securely in UVA Box.
+This is OPTIONAL practice — not required for your grade.
+            """.strip(),
+            data_usage=[
+                "Generate personalized practice problems",
+                "Grade submissions and provide feedback",
+                "Track progress over time"
+            ],
+            data_shared_with=[
+                "Your professor (Dr. Santugini)",
+                "Course TAs",
+                "AI services (OpenAI) for grading"
+            ],
+            revocable=True,
+            optional_participation=True
+        )
+    
+    # ─────────────────────────────────────────────────────────
+    # Hub Lifecycle Hooks
+    # ─────────────────────────────────────────────────────────
+    
+    async def on_initialize(self):
+        """Called after hub initialization"""
+        logger.info("Practice Hub initialized")
+        logger.info(f"Course: {self.config.course}")
+        logger.info(f"Semester: {self.config.semester}")
+    
+    async def on_user_consent(self, user_id: str):
+        """
+        Called when a user gives consent.
+        Create their profile in Le Veilleur.
+        """
+        logger.info(f"Creating profile for {user_id}")
+        
+        # Call Le Veilleur to create student profile
+        await self.router.call_agent_skill(
+            "le_veilleur",
+            "create_profile",
+            {
+                "student_id": user_id,
+                "course": self.config.course,
+                "semester": self.config.semester
+            }
+        )
+    
+    async def on_action_start(self, action_id: str, user_id: str, params: dict):
+        """Log action start"""
+        logger.info(f"Action '{action_id}' started by {user_id}")
+    
+    async def on_action_complete(self, action_id: str, user_id: str, result: dict):
+        """Log action completion"""
+        logger.info(f"Action '{action_id}' completed for {user_id}")
+
+
+# ─────────────────────────────────────────────────────────────
+# Run the Hub
+# ─────────────────────────────────────────────────────────────
+
+async def main():
+    """Run Practice Hub as standalone server"""
+    from fastapi import FastAPI
+    import uvicorn
+    
+    # Create hub
+    hub = PracticeHub()
+    await hub.initialize()
+    
+    # Create FastAPI app
+    app = FastAPI(
+        title="Practice Hub",
+        description="Personalized derivative practice for ECON 3010",
+        version="1.0.0"
+    )
+    
+    # Add hub routes
+    app.include_router(create_hub_app(hub), prefix="/api")
+    
+    # Add static files / frontend here in production
+    
+    # Health check at root
+    @app.get("/")
+    async def root():
+        return {"hub": "Practice Hub", "status": "running"}
+    
+    # Run server
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+
+
+============================================================
+FILE 4/14: hubcore\__init__.py
+LINES: 24
+============================================================
+
+"""
+Xmmersia HubCore - Foundation for all Xmmersia Hubs
+"""
+
+from .base_hub import BaseHub
+from .config import HubConfig, SkillExposure, HubAction, AuthConfig, ConsentConfig, UITheme
+from .router import HubRouter
+from .auth import AuthManager
+from .consent import ConsentManager
+
+__version__ = "1.0.0"
+__all__ = [
+    "BaseHub",
+    "HubConfig",
+    "SkillExposure", 
+    "HubAction",
+    "AuthConfig",
+    "ConsentConfig",
+    "UITheme",
+    "HubRouter",
+    "AuthManager",
+    "ConsentManager"
+]
+
+
+============================================================
+FILE 5/14: hubcore\auth.py
+LINES: 213
+============================================================
+
+"""
+HubCore Authentication Manager
+Handles magic link auth and session management for hubs.
+"""
+
+from typing import Dict, Any, Optional
+from datetime import datetime, timedelta
+import secrets
+import hashlib
+import logging
+
+from .config import AuthConfig
+
+logger = logging.getLogger(__name__)
+
+
+class AuthManager:
+    """
+    Manages authentication for a Hub.
+    
+    Supports:
+    - Magic link authentication (default)
+    - Session management
+    - Email domain validation
+    
+    Note: This is a base implementation. Production deployments
+    should use a proper auth service (e.g., Stytch, Auth0).
+    """
+    
+    def __init__(self, config: AuthConfig):
+        self.config = config
+        
+        # In-memory stores (replace with database in production)
+        self._pending_links: Dict[str, Dict] = {}  # token -> {email, expires}
+        self._sessions: Dict[str, Dict] = {}  # session_token -> {user_id, email, expires}
+        
+    async def send_magic_link(self, email: str) -> Dict[str, Any]:
+        """
+        Generate and "send" a magic link.
+        
+        In production, this would send an actual email.
+        For development, it returns the link directly.
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            Dict with status and (in dev) the magic link
+        """
+        # Validate email domain
+        if not self.config.validate_email(email):
+            return {
+                "success": False,
+                "error": f"Email must be from {self.config.email_domain}"
+            }
+        
+        # Generate token
+        token = secrets.token_urlsafe(32)
+        expires = datetime.now() + timedelta(minutes=15)
+        
+        # Store pending link
+        self._pending_links[token] = {
+            "email": email,
+            "expires": expires
+        }
+        
+        logger.info(f"Magic link generated for {email}")
+        
+        # In production, send email here
+        # For now, return the token (dev mode)
+        return {
+            "success": True,
+            "message": f"Magic link sent to {email}",
+            "dev_token": token  # Remove in production!
+        }
+    
+    async def verify_magic_link(self, token: str) -> Dict[str, Any]:
+        """
+        Verify a magic link token and create a session.
+        
+        Args:
+            token: The magic link token
+            
+        Returns:
+            Dict with session info if valid
+        """
+        pending = self._pending_links.get(token)
+        
+        if not pending:
+            return {"success": False, "error": "Invalid or expired link"}
+        
+        if datetime.now() > pending["expires"]:
+            del self._pending_links[token]
+            return {"success": False, "error": "Link has expired"}
+        
+        # Create session
+        email = pending["email"]
+        user_id = self._email_to_user_id(email)
+        session_token = secrets.token_urlsafe(32)
+        
+        session_expires = datetime.now() + timedelta(
+            hours=self.config.session_duration_hours
+        )
+        
+        self._sessions[session_token] = {
+            "user_id": user_id,
+            "email": email,
+            "expires": session_expires,
+            "created": datetime.now()
+        }
+        
+        # Clean up used link
+        del self._pending_links[token]
+        
+        logger.info(f"Session created for {email}")
+        
+        return {
+            "success": True,
+            "session_token": session_token,
+            "user_id": user_id,
+            "email": email,
+            "expires": session_expires.isoformat()
+        }
+    
+    async def validate_session(self, session_token: str) -> Optional[Dict[str, Any]]:
+        """
+        Validate a session token.
+        
+        Args:
+            session_token: The session token to validate
+            
+        Returns:
+            User info dict if valid, None if not
+        """
+        session = self._sessions.get(session_token)
+        
+        if not session:
+            return None
+        
+        if datetime.now() > session["expires"]:
+            del self._sessions[session_token]
+            return None
+        
+        return {
+            "user_id": session["user_id"],
+            "email": session["email"],
+            "expires": session["expires"].isoformat()
+        }
+    
+    async def invalidate_session(self, session_token: str) -> bool:
+        """
+        Invalidate (logout) a session.
+        
+        Args:
+            session_token: The session to invalidate
+            
+        Returns:
+            True if session was invalidated
+        """
+        if session_token in self._sessions:
+            del self._sessions[session_token]
+            return True
+        return False
+    
+    def _email_to_user_id(self, email: str) -> str:
+        """
+        Convert email to a user ID.
+        
+        For UVA emails, extracts the computing ID.
+        For other emails, creates a hash-based ID.
+        
+        Args:
+            email: User's email
+            
+        Returns:
+            User ID string
+        """
+        # For UVA emails, use the computing ID (part before @)
+        if email.endswith("@virginia.edu"):
+            return email.split("@")[0]
+        
+        # For other emails, create a hash-based ID
+        return hashlib.sha256(email.encode()).hexdigest()[:12]
+    
+    async def cleanup_expired(self):
+        """
+        Clean up expired links and sessions.
+        Call this periodically.
+        """
+        now = datetime.now()
+        
+        # Clean expired pending links
+        expired_links = [
+            token for token, data in self._pending_links.items()
+            if now > data["expires"]
+        ]
+        for token in expired_links:
+            del self._pending_links[token]
+        
+        # Clean expired sessions
+        expired_sessions = [
+            token for token, data in self._sessions.items()
+            if now > data["expires"]
+        ]
+        for token in expired_sessions:
+            del self._sessions[token]
+        
+        if expired_links or expired_sessions:
+            logger.info(
+                f"Cleaned up {len(expired_links)} links, "
+                f"{len(expired_sessions)} sessions"
+            )
+
+
+============================================================
+FILE 6/14: hubcore\base_hub.py
+LINES: 411
+============================================================
+
+"""
+HubCore BaseHub
+Abstract base class all Xmmersia Hubs must inherit from.
+"""
+
+from abc import ABC, abstractmethod
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+import asyncio
+import logging
+
+from .config import (
+    HubConfig, 
+    SkillExposure, 
+    HubAction, 
+    AuthConfig, 
+    ConsentConfig,
+    AgentConnection
+)
+from .router import HubRouter
+from .auth import AuthManager
+from .consent import ConsentManager
+
+logger = logging.getLogger(__name__)
+
+
+class BaseHub(ABC):
+    """
+    Abstract base class all Xmmersia Hubs must inherit from.
+    
+    A Hub is a unified interface that brings together multiple agents
+    to serve a specific domain, exposing curated skills while keeping
+    agents complete and independent.
+    
+    Subclasses must implement:
+    - configure() -> HubConfig
+    - register_agents() -> dict
+    - define_skill_exposure() -> dict
+    - define_ui_actions() -> list
+    """
+    
+    def __init__(self):
+        self.config: Optional[HubConfig] = None
+        self.agents: Dict[str, AgentConnection] = {}
+        self.actions: List[HubAction] = []
+        self.router: Optional[HubRouter] = None
+        self.auth_manager: Optional[AuthManager] = None
+        self.consent_manager: Optional[ConsentManager] = None
+        
+        self.initialized = False
+        self.started_at: Optional[datetime] = None
+        
+    # ─────────────────────────────────────────────────────────────
+    # Abstract methods - must be implemented by subclasses
+    # ─────────────────────────────────────────────────────────────
+    
+    @abstractmethod
+    def configure(self) -> HubConfig:
+        """
+        Return the configuration for this hub.
+        
+        Returns:
+            HubConfig with name, slug, description, version, etc.
+        """
+        pass
+    
+    @abstractmethod
+    def register_agents(self) -> Dict[str, str]:
+        """
+        Register the agents available in this hub.
+        
+        Returns:
+            Dict mapping agent name to URL, e.g.:
+            {
+                "gaston": "http://localhost:8020",
+                "lumiere": "http://localhost:8021"
+            }
+        """
+        pass
+    
+    @abstractmethod
+    def define_skill_exposure(self) -> Dict[str, SkillExposure]:
+        """
+        Define which skills from each agent are exposed.
+        
+        Returns:
+            Dict mapping agent name to SkillExposure, e.g.:
+            {
+                "gaston": SkillExposure(
+                    exposed=["request_worksheet"],
+                    hidden=["chatbot"]
+                )
+            }
+        """
+        pass
+    
+    @abstractmethod
+    def define_ui_actions(self) -> List[HubAction]:
+        """
+        Define the user-facing actions available in this hub.
+        
+        Returns:
+            List of HubAction objects defining buttons/actions
+        """
+        pass
+    
+    # ─────────────────────────────────────────────────────────────
+    # Optional overridable methods
+    # ─────────────────────────────────────────────────────────────
+    
+    def configure_auth(self) -> AuthConfig:
+        """
+        Configure authentication for this hub.
+        Override to customize auth settings.
+        
+        Returns:
+            AuthConfig with method, email_domain, etc.
+        """
+        return AuthConfig()
+    
+    def configure_consent(self) -> ConsentConfig:
+        """
+        Configure consent requirements for this hub.
+        Override to customize consent settings.
+        
+        Returns:
+            ConsentConfig with text, data_usage, etc.
+        """
+        return ConsentConfig()
+    
+    async def on_initialize(self):
+        """
+        Called after hub initialization.
+        Override to perform custom setup.
+        """
+        pass
+    
+    async def on_user_login(self, user_id: str, email: str):
+        """
+        Called when a user logs in.
+        Override to perform custom logic.
+        """
+        pass
+    
+    async def on_user_consent(self, user_id: str):
+        """
+        Called when a user gives consent.
+        Override to perform custom logic (e.g., create profile).
+        """
+        pass
+    
+    async def on_action_start(self, action_id: str, user_id: str, params: dict):
+        """
+        Called before an action is executed.
+        Override to add logging, validation, etc.
+        """
+        pass
+    
+    async def on_action_complete(self, action_id: str, user_id: str, result: dict):
+        """
+        Called after an action completes.
+        Override to add logging, notifications, etc.
+        """
+        pass
+    
+    # ─────────────────────────────────────────────────────────────
+    # Core lifecycle methods
+    # ─────────────────────────────────────────────────────────────
+    
+    async def initialize(self):
+        """
+        Initialize the hub. Call this before using the hub.
+        
+        1. Load configuration
+        2. Register agents
+        3. Set up skill exposure
+        4. Initialize router
+        5. Set up auth and consent managers
+        """
+        logger.info(f"Initializing hub...")
+        
+        # Load configuration
+        self.config = self.configure()
+        logger.info(f"Hub: {self.config.name} v{self.config.version}")
+        
+        # Register agents with skill exposure
+        agent_urls = self.register_agents()
+        skill_exposures = self.define_skill_exposure()
+        
+        for agent_name, url in agent_urls.items():
+            exposure = skill_exposures.get(agent_name, SkillExposure())
+            self.agents[agent_name] = AgentConnection(
+                name=agent_name,
+                url=url,
+                skill_exposure=exposure
+            )
+            logger.info(f"Registered agent: {agent_name} at {url}")
+            logger.info(f"  Exposed skills: {exposure.exposed}")
+            logger.info(f"  Hidden skills: {exposure.hidden}")
+        
+        # Load UI actions
+        self.actions = self.define_ui_actions()
+        logger.info(f"Loaded {len(self.actions)} UI actions")
+        
+        # Initialize router
+        self.router = HubRouter(self.agents, self.actions)
+        
+        # Initialize auth manager
+        auth_config = self.configure_auth()
+        self.auth_manager = AuthManager(auth_config)
+        
+        # Initialize consent manager
+        consent_config = self.configure_consent()
+        self.consent_manager = ConsentManager(consent_config)
+        
+        # Mark as initialized
+        self.initialized = True
+        self.started_at = datetime.now()
+        
+        # Call custom initialization hook
+        await self.on_initialize()
+        
+        logger.info(f"Hub initialized successfully")
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Check health of hub and all connected agents.
+        
+        Returns:
+            Dict with health status
+        """
+        if not self.initialized:
+            return {"status": "not_initialized"}
+        
+        agent_health = {}
+        for name, agent in self.agents.items():
+            # TODO: Actually ping agent health endpoints
+            agent_health[name] = {
+                "url": agent.url,
+                "healthy": True,  # Placeholder
+                "exposed_skills": agent.skill_exposure.exposed
+            }
+        
+        return {
+            "status": "healthy",
+            "hub": self.config.name,
+            "version": self.config.version,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "agents": agent_health,
+            "actions_count": len(self.actions)
+        }
+    
+    # ─────────────────────────────────────────────────────────────
+    # Action handling
+    # ─────────────────────────────────────────────────────────────
+    
+    async def handle_action(
+        self, 
+        action_id: str, 
+        user_id: str, 
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Handle a user action.
+        
+        1. Verify user is authenticated
+        2. Verify user has consented
+        3. Check preconditions
+        4. Route to appropriate agent
+        5. Return result
+        
+        Args:
+            action_id: The action to execute
+            user_id: The user making the request
+            params: Parameters for the action
+            
+        Returns:
+            Result from the agent
+        """
+        if not self.initialized:
+            raise RuntimeError("Hub not initialized")
+        
+        # Find the action
+        action = self._get_action(action_id)
+        if not action:
+            raise ValueError(f"Unknown action: {action_id}")
+        
+        # Check if skill is exposed
+        agent = self.agents.get(action.agent)
+        if not agent:
+            raise ValueError(f"Unknown agent: {action.agent}")
+        
+        if not agent.skill_exposure.is_user_callable(action.skill):
+            raise PermissionError(f"Skill {action.skill} is not available in this hub")
+        
+        # Call pre-action hook
+        await self.on_action_start(action_id, user_id, params)
+        
+        # Check precondition if specified
+        if action.precondition:
+            precondition_result = await self.router.check_precondition(
+                action.precondition, user_id, params
+            )
+            if not precondition_result.get("satisfied", False):
+                return {
+                    "status": "precondition_failed",
+                    "message": precondition_result.get("message", "Precondition not met"),
+                    "action_required": precondition_result.get("action_required")
+                }
+        
+        # Route to agent
+        result = await self.router.route_action(action, user_id, params)
+        
+        # Call post-action hook
+        await self.on_action_complete(action_id, user_id, result)
+        
+        return result
+    
+    def _get_action(self, action_id: str) -> Optional[HubAction]:
+        """Find an action by ID"""
+        for action in self.actions:
+            if action.id == action_id:
+                return action
+        return None
+    
+    # ─────────────────────────────────────────────────────────────
+    # Auth and consent
+    # ─────────────────────────────────────────────────────────────
+    
+    async def check_auth(self, session_token: str) -> Dict[str, Any]:
+        """
+        Check if a session token is valid.
+        
+        Returns:
+            Dict with user info if valid, None if not
+        """
+        return await self.auth_manager.validate_session(session_token)
+    
+    async def request_magic_link(self, email: str) -> Dict[str, Any]:
+        """
+        Request a magic link for login.
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            Dict with status
+        """
+        return await self.auth_manager.send_magic_link(email)
+    
+    async def check_consent(self, user_id: str) -> bool:
+        """
+        Check if user has consented.
+        
+        Returns:
+            True if consented, False if not
+        """
+        return await self.consent_manager.has_consented(user_id)
+    
+    async def record_consent(self, user_id: str) -> Dict[str, Any]:
+        """
+        Record user's consent.
+        
+        Returns:
+            Dict with status
+        """
+        result = await self.consent_manager.record_consent(user_id)
+        
+        # Call consent hook
+        await self.on_user_consent(user_id)
+        
+        return result
+    
+    # ─────────────────────────────────────────────────────────────
+    # Hub card (similar to agent card)
+    # ─────────────────────────────────────────────────────────────
+    
+    def get_hub_card(self) -> Dict[str, Any]:
+        """
+        Generate hub card (similar to agent card).
+        Describes the hub's capabilities and available actions.
+        
+        Returns:
+            Dict with hub information
+        """
+        return {
+            "name": self.config.name,
+            "slug": self.config.slug,
+            "description": self.config.description,
+            "version": self.config.version,
+            "url": f"https://xmmersia.com/{self.config.slug}",
+            "hubCoreVersion": "1.0.0",
+            "theme": self.config.theme.value,
+            "agents": [
+                {
+                    "name": name,
+                    "url": agent.url,
+                    "exposed_skills": agent.skill_exposure.exposed
+                }
+                for name, agent in self.agents.items()
+            ],
+            "actions": [action.to_dict() for action in self.actions],
+            "auth": {
+                "required": self.config.auth_required,
+                "method": self.auth_manager.config.method if self.auth_manager else "magic_link"
+            },
+            "consent": {
+                "required": self.config.consent_required
+            }
+        }
+
+
+============================================================
+FILE 7/14: hubcore\config.py
+LINES: 191
+============================================================
+
+"""
+HubCore Configuration Classes
+Defines the configuration structures for Hubs
+"""
+
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any
+from enum import Enum
+
+
+class UITheme(Enum):
+    """Available UI themes for hubs"""
+    ORGANIC = "organic"      # Gaudí-inspired, flowing
+    MINIMAL = "minimal"      # Clean, simple
+    DARK = "dark"           # Dark mode
+    ACADEMIC = "academic"   # Traditional, formal
+
+
+@dataclass
+class HubConfig:
+    """
+    Core configuration for a Hub.
+    Defines identity, behavior, and display settings.
+    """
+    name: str                           # Human-readable name: "Practice Hub"
+    slug: str                           # URL slug: "practice" -> xmmersia.com/practice
+    description: str                    # Description shown to users
+    version: str                        # Semantic version
+    
+    # Behavior
+    auth_required: bool = True          # Require login?
+    consent_required: bool = True       # Require consent form?
+    
+    # Display
+    theme: UITheme = UITheme.ORGANIC    # UI theme
+    tagline: str = ""                   # Optional tagline
+    icon: str = "🎓"                    # Hub icon/emoji
+    
+    # Metadata
+    course: Optional[str] = None        # Associated course if educational
+    semester: Optional[str] = None      # Associated semester
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "slug": self.slug,
+            "description": self.description,
+            "version": self.version,
+            "auth_required": self.auth_required,
+            "consent_required": self.consent_required,
+            "theme": self.theme.value,
+            "tagline": self.tagline,
+            "icon": self.icon,
+            "course": self.course,
+            "semester": self.semester
+        }
+
+
+@dataclass
+class SkillExposure:
+    """
+    Defines which skills from an agent are exposed in this Hub.
+    
+    - exposed: Skills shown in UI, directly callable by users
+    - hidden: Skills the agent has but are not available in this hub
+    - internal: Skills that hub logic can call, but users cannot directly invoke
+    """
+    exposed: List[str] = field(default_factory=list)
+    hidden: List[str] = field(default_factory=list)
+    internal: List[str] = field(default_factory=list)
+    
+    def is_user_callable(self, skill_id: str) -> bool:
+        """Check if a skill can be called by a user in this hub"""
+        return skill_id in self.exposed
+    
+    def is_hub_callable(self, skill_id: str) -> bool:
+        """Check if hub logic can call this skill"""
+        return skill_id in self.exposed or skill_id in self.internal
+    
+    def all_available(self) -> List[str]:
+        """All skills available to hub logic"""
+        return self.exposed + self.internal
+
+
+@dataclass
+class HubAction:
+    """
+    A user-facing action in the Hub UI.
+    Maps a button/action to an agent skill.
+    """
+    id: str                             # Unique identifier
+    label: str                          # Display label: "Generate New Worksheet"
+    icon: str                           # Emoji or icon class
+    agent: str                          # Which agent handles this
+    skill: str                          # Which skill to invoke
+    
+    # Optional configuration
+    description: str = ""               # Longer description
+    precondition: Optional[str] = None  # Skill to check before allowing action
+    confirm: bool = False               # Require confirmation?
+    confirm_message: str = ""           # Confirmation message if confirm=True
+    
+    # UI hints
+    primary: bool = False               # Is this a primary action?
+    position: int = 0                   # Display order
+    group: Optional[str] = None         # Group with other actions
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "icon": self.icon,
+            "agent": self.agent,
+            "skill": self.skill,
+            "description": self.description,
+            "precondition": self.precondition,
+            "confirm": self.confirm,
+            "primary": self.primary,
+            "position": self.position,
+            "group": self.group
+        }
+
+
+@dataclass 
+class AuthConfig:
+    """
+    Authentication configuration for a Hub.
+    """
+    method: str = "magic_link"          # "magic_link", "oauth", "password"
+    email_domain: Optional[str] = None  # Restrict to domain: "virginia.edu"
+    session_duration_hours: int = 24    # How long sessions last
+    
+    # OAuth settings (if method="oauth")
+    oauth_provider: Optional[str] = None
+    oauth_client_id: Optional[str] = None
+    
+    def validate_email(self, email: str) -> bool:
+        """Check if email is valid for this hub"""
+        if self.email_domain is None:
+            return True
+        return email.endswith(f"@{self.email_domain}")
+
+
+@dataclass
+class ConsentConfig:
+    """
+    Consent/privacy configuration for a Hub.
+    """
+    required: bool = True               # Is consent required?
+    
+    # Consent text
+    title: str = "Consent Required"
+    text: str = ""                      # Main consent text
+    
+    # Data usage disclosure
+    data_usage: List[str] = field(default_factory=list)  # What data is used for
+    data_shared_with: List[str] = field(default_factory=list)  # Who sees data
+    
+    # Options
+    revocable: bool = True              # Can user revoke consent?
+    optional_participation: bool = True  # Is participation optional?
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "required": self.required,
+            "title": self.title,
+            "text": self.text,
+            "data_usage": self.data_usage,
+            "data_shared_with": self.data_shared_with,
+            "revocable": self.revocable,
+            "optional_participation": self.optional_participation
+        }
+
+
+@dataclass
+class AgentConnection:
+    """
+    Connection details for an agent in the hub.
+    """
+    name: str                           # Agent name: "gaston"
+    url: str                            # Agent URL: "http://localhost:8020"
+    skill_exposure: SkillExposure       # Which skills are exposed
+    
+    # Connection settings
+    timeout_seconds: int = 30           # Request timeout
+    retry_attempts: int = 3             # Retry on failure
+    
+    # Status
+    healthy: bool = False               # Is agent responding?
+    last_health_check: Optional[str] = None  # ISO timestamp
+
+
+============================================================
+FILE 8/14: hubcore\consent.py
+LINES: 187
+============================================================
+
+"""
+HubCore Consent Manager
+Handles user consent for data usage in hubs.
+"""
+
+from typing import Dict, Any, Optional, Set
+from datetime import datetime
+import logging
+
+from .config import ConsentConfig
+
+logger = logging.getLogger(__name__)
+
+
+class ConsentManager:
+    """
+    Manages user consent for a Hub.
+    
+    Tracks:
+    - Who has consented
+    - When they consented
+    - Consent revocation
+    
+    Note: This is a base implementation using in-memory storage.
+    Production deployments should persist consent records.
+    """
+    
+    def __init__(self, config: ConsentConfig):
+        self.config = config
+        
+        # In-memory consent store (replace with database in production)
+        self._consents: Dict[str, Dict] = {}  # user_id -> {timestamp, revoked}
+        
+    async def has_consented(self, user_id: str) -> bool:
+        """
+        Check if a user has given consent.
+        
+        Args:
+            user_id: The user to check
+            
+        Returns:
+            True if user has active (non-revoked) consent
+        """
+        if not self.config.required:
+            return True  # No consent required
+        
+        consent = self._consents.get(user_id)
+        if not consent:
+            return False
+        
+        # Check if revoked
+        if consent.get("revoked"):
+            return False
+        
+        return True
+    
+    async def record_consent(self, user_id: str) -> Dict[str, Any]:
+        """
+        Record a user's consent.
+        
+        Args:
+            user_id: The user giving consent
+            
+        Returns:
+            Dict with consent record info
+        """
+        timestamp = datetime.now()
+        
+        self._consents[user_id] = {
+            "user_id": user_id,
+            "timestamp": timestamp,
+            "revoked": False,
+            "revoked_at": None,
+            "consent_version": "1.0"  # Track consent text version
+        }
+        
+        logger.info(f"Consent recorded for user {user_id}")
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "timestamp": timestamp.isoformat(),
+            "message": "Consent recorded successfully"
+        }
+    
+    async def revoke_consent(self, user_id: str) -> Dict[str, Any]:
+        """
+        Revoke a user's consent.
+        
+        Args:
+            user_id: The user revoking consent
+            
+        Returns:
+            Dict with revocation status
+        """
+        if not self.config.revocable:
+            return {
+                "success": False,
+                "error": "Consent cannot be revoked for this hub"
+            }
+        
+        consent = self._consents.get(user_id)
+        if not consent:
+            return {
+                "success": False,
+                "error": "No consent record found"
+            }
+        
+        consent["revoked"] = True
+        consent["revoked_at"] = datetime.now()
+        
+        logger.info(f"Consent revoked for user {user_id}")
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "message": "Consent has been revoked"
+        }
+    
+    async def get_consent_info(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get consent information for a user.
+        
+        Args:
+            user_id: The user to look up
+            
+        Returns:
+            Consent record if exists, None otherwise
+        """
+        consent = self._consents.get(user_id)
+        if not consent:
+            return None
+        
+        return {
+            "user_id": consent["user_id"],
+            "consented_at": consent["timestamp"].isoformat(),
+            "revoked": consent["revoked"],
+            "revoked_at": consent["revoked_at"].isoformat() if consent["revoked_at"] else None,
+            "consent_version": consent["consent_version"]
+        }
+    
+    def get_consent_text(self) -> Dict[str, Any]:
+        """
+        Get the consent form content.
+        
+        Returns:
+            Dict with consent form content
+        """
+        return {
+            "title": self.config.title,
+            "text": self.config.text,
+            "data_usage": self.config.data_usage,
+            "data_shared_with": self.config.data_shared_with,
+            "optional_participation": self.config.optional_participation,
+            "revocable": self.config.revocable
+        }
+    
+    async def get_all_consented_users(self) -> Set[str]:
+        """
+        Get all users who have active consent.
+        
+        Returns:
+            Set of user IDs with active consent
+        """
+        return {
+            user_id 
+            for user_id, consent in self._consents.items()
+            if not consent.get("revoked")
+        }
+    
+    async def export_consent_records(self) -> list:
+        """
+        Export all consent records (for compliance).
+        
+        Returns:
+            List of consent records
+        """
+        return [
+            {
+                "user_id": user_id,
+                "consented_at": consent["timestamp"].isoformat(),
+                "revoked": consent["revoked"],
+                "revoked_at": consent["revoked_at"].isoformat() if consent["revoked_at"] else None
+            }
+            for user_id, consent in self._consents.items()
+        ]
+
+
+============================================================
+FILE 9/14: hubcore\handlers\__init__.py
+LINES: 9
+============================================================
+
+"""
+HubCore Handlers
+HTTP handlers for hub endpoints.
+"""
+
+from .hub_handler import HubHandler
+
+__all__ = ["HubHandler"]
+
+
+============================================================
+FILE 10/14: hubcore\handlers\hub_handler.py
+LINES: 293
+============================================================
+
+"""
+HubCore HTTP Handler
+FastAPI router for hub endpoints.
+"""
+
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
+import logging
+
+from ..base_hub import BaseHub
+
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────
+# Request/Response Models
+# ─────────────────────────────────────────────────────────────
+
+class MagicLinkRequest(BaseModel):
+    email: EmailStr
+
+
+class MagicLinkVerifyRequest(BaseModel):
+    token: str
+
+
+class ConsentRequest(BaseModel):
+    user_id: str
+
+
+class ActionRequest(BaseModel):
+    action_id: str
+    params: Dict[str, Any] = {}
+
+
+# ─────────────────────────────────────────────────────────────
+# Hub Handler
+# ─────────────────────────────────────────────────────────────
+
+class HubHandler:
+    """
+    Creates FastAPI routes for a Hub.
+    
+    Provides endpoints for:
+    - Hub info and health
+    - Authentication (magic link)
+    - Consent management
+    - Action execution
+    """
+    
+    def __init__(self, hub: BaseHub):
+        self.hub = hub
+        self.router = APIRouter()
+        self._setup_routes()
+    
+    def _setup_routes(self):
+        """Set up all routes"""
+        
+        # ─────────────────────────────────────────────────────
+        # Info & Health
+        # ─────────────────────────────────────────────────────
+        
+        @self.router.get("/")
+        async def hub_info():
+            """Get hub information"""
+            return self.hub.get_hub_card()
+        
+        @self.router.get("/health")
+        async def health_check():
+            """Health check endpoint"""
+            return await self.hub.health_check()
+        
+        @self.router.get("/actions")
+        async def get_actions():
+            """Get available actions"""
+            return {
+                "actions": [action.to_dict() for action in self.hub.actions]
+            }
+        
+        @self.router.get("/consent-form")
+        async def get_consent_form():
+            """Get consent form content"""
+            return self.hub.consent_manager.get_consent_text()
+        
+        # ─────────────────────────────────────────────────────
+        # Authentication
+        # ─────────────────────────────────────────────────────
+        
+        @self.router.post("/auth/magic-link")
+        async def request_magic_link(request: MagicLinkRequest):
+            """Request a magic link for login"""
+            result = await self.hub.request_magic_link(request.email)
+            
+            if not result.get("success"):
+                raise HTTPException(status_code=400, detail=result.get("error"))
+            
+            return result
+        
+        @self.router.post("/auth/verify")
+        async def verify_magic_link(request: MagicLinkVerifyRequest):
+            """Verify magic link and get session"""
+            result = await self.hub.auth_manager.verify_magic_link(request.token)
+            
+            if not result.get("success"):
+                raise HTTPException(status_code=401, detail=result.get("error"))
+            
+            # Call login hook
+            await self.hub.on_user_login(
+                result["user_id"], 
+                result["email"]
+            )
+            
+            return result
+        
+        @self.router.get("/auth/session")
+        async def check_session(request: Request):
+            """Check current session status"""
+            session_token = self._get_session_token(request)
+            
+            if not session_token:
+                return {"authenticated": False}
+            
+            user = await self.hub.check_auth(session_token)
+            
+            if not user:
+                return {"authenticated": False}
+            
+            # Also check consent
+            has_consent = await self.hub.check_consent(user["user_id"])
+            
+            return {
+                "authenticated": True,
+                "user": user,
+                "has_consent": has_consent
+            }
+        
+        @self.router.post("/auth/logout")
+        async def logout(request: Request):
+            """Logout and invalidate session"""
+            session_token = self._get_session_token(request)
+            
+            if session_token:
+                await self.hub.auth_manager.invalidate_session(session_token)
+            
+            return {"success": True, "message": "Logged out"}
+        
+        # ─────────────────────────────────────────────────────
+        # Consent
+        # ─────────────────────────────────────────────────────
+        
+        @self.router.post("/consent")
+        async def record_consent(request: Request):
+            """Record user consent"""
+            user = await self._require_auth(request)
+            
+            result = await self.hub.record_consent(user["user_id"])
+            return result
+        
+        @self.router.delete("/consent")
+        async def revoke_consent(request: Request):
+            """Revoke user consent"""
+            user = await self._require_auth(request)
+            
+            result = await self.hub.consent_manager.revoke_consent(user["user_id"])
+            
+            if not result.get("success"):
+                raise HTTPException(status_code=400, detail=result.get("error"))
+            
+            return result
+        
+        @self.router.get("/consent/status")
+        async def consent_status(request: Request):
+            """Get consent status for current user"""
+            user = await self._require_auth(request)
+            
+            info = await self.hub.consent_manager.get_consent_info(user["user_id"])
+            
+            return {
+                "has_consent": info is not None and not info.get("revoked"),
+                "consent_info": info
+            }
+        
+        # ─────────────────────────────────────────────────────
+        # Actions
+        # ─────────────────────────────────────────────────────
+        
+        @self.router.post("/action")
+        async def execute_action(action_request: ActionRequest, request: Request):
+            """Execute a hub action"""
+            user = await self._require_auth(request)
+            
+            # Check consent if required
+            if self.hub.config.consent_required:
+                has_consent = await self.hub.check_consent(user["user_id"])
+                if not has_consent:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail="Consent required before using this hub"
+                    )
+            
+            try:
+                result = await self.hub.handle_action(
+                    action_request.action_id,
+                    user["user_id"],
+                    action_request.params
+                )
+                return result
+                
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except PermissionError as e:
+                raise HTTPException(status_code=403, detail=str(e))
+            except Exception as e:
+                logger.error(f"Action failed: {e}")
+                raise HTTPException(status_code=500, detail="Action failed")
+        
+        @self.router.post("/action/{action_id}")
+        async def execute_action_by_id(
+            action_id: str, 
+            request: Request,
+            params: Dict[str, Any] = {}
+        ):
+            """Execute a specific action by ID"""
+            user = await self._require_auth(request)
+            
+            # Check consent
+            if self.hub.config.consent_required:
+                has_consent = await self.hub.check_consent(user["user_id"])
+                if not has_consent:
+                    raise HTTPException(status_code=403, detail="Consent required")
+            
+            try:
+                result = await self.hub.handle_action(action_id, user["user_id"], params)
+                return result
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except PermissionError as e:
+                raise HTTPException(status_code=403, detail=str(e))
+    
+    # ─────────────────────────────────────────────────────────
+    # Helper Methods
+    # ─────────────────────────────────────────────────────────
+    
+    def _get_session_token(self, request: Request) -> Optional[str]:
+        """Extract session token from request"""
+        # Check Authorization header
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            return auth_header[7:]
+        
+        # Check cookie
+        return request.cookies.get("session_token")
+    
+    async def _require_auth(self, request: Request) -> Dict[str, Any]:
+        """Require authentication, raise 401 if not authenticated"""
+        session_token = self._get_session_token(request)
+        
+        if not session_token:
+            raise HTTPException(
+                status_code=401, 
+                detail="Authentication required"
+            )
+        
+        user = await self.hub.check_auth(session_token)
+        
+        if not user:
+            raise HTTPException(
+                status_code=401, 
+                detail="Invalid or expired session"
+            )
+        
+        return user
+
+
+def create_hub_app(hub: BaseHub) -> APIRouter:
+    """
+    Create a FastAPI router for a hub.
+    
+    Usage:
+        from fastapi import FastAPI
+        from hubcore import create_hub_app
+        
+        app = FastAPI()
+        hub = PracticeHub()
+        await hub.initialize()
+        
+        app.include_router(create_hub_app(hub), prefix="/practice")
+    """
+    handler = HubHandler(hub)
+    return handler.router
+
+
+============================================================
+FILE 11/14: hubcore\router.py
+LINES: 263
+============================================================
+
+"""
+HubCore Router
+Routes user actions to appropriate agents via A2A protocol.
+"""
+
+from typing import Dict, List, Any, Optional
+import httpx
+import json
+import logging
+from datetime import datetime
+import uuid
+
+from .config import HubAction, AgentConnection
+
+logger = logging.getLogger(__name__)
+
+
+class HubRouter:
+    """
+    Routes hub actions to appropriate agents via A2A protocol.
+    
+    The router:
+    1. Receives action requests from the hub
+    2. Finds the appropriate agent
+    3. Sends A2A message to invoke the skill
+    4. Returns the result
+    """
+    
+    def __init__(
+        self, 
+        agents: Dict[str, AgentConnection],
+        actions: List[HubAction]
+    ):
+        self.agents = agents
+        self.actions = actions
+        self.client = httpx.AsyncClient(timeout=30.0)
+        
+    async def route_action(
+        self,
+        action: HubAction,
+        user_id: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Route an action to its target agent.
+        
+        Args:
+            action: The HubAction to execute
+            user_id: The user making the request
+            params: Parameters for the skill
+            
+        Returns:
+            Result from the agent
+        """
+        agent = self.agents.get(action.agent)
+        if not agent:
+            raise ValueError(f"Agent not found: {action.agent}")
+        
+        # Check if skill is callable
+        if not agent.skill_exposure.is_hub_callable(action.skill):
+            raise PermissionError(
+                f"Skill {action.skill} is not available for agent {action.agent}"
+            )
+        
+        logger.info(f"Routing action '{action.id}' to {action.agent}.{action.skill}")
+        
+        # Build A2A message
+        message = self._build_a2a_message(action.skill, user_id, params)
+        
+        # Send to agent
+        try:
+            result = await self._send_to_agent(agent.url, message)
+            logger.info(f"Action '{action.id}' completed successfully")
+            return result
+        except Exception as e:
+            logger.error(f"Action '{action.id}' failed: {e}")
+            raise
+    
+    async def check_precondition(
+        self,
+        precondition_skill: str,
+        user_id: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Check a precondition before allowing an action.
+        
+        Preconditions are skills that return {"satisfied": bool, "message": str}
+        
+        Args:
+            precondition_skill: The skill to check (format: "agent.skill" or just "skill")
+            user_id: The user to check for
+            params: Additional parameters
+            
+        Returns:
+            Dict with satisfied status and message
+        """
+        # Parse agent and skill from precondition
+        if "." in precondition_skill:
+            agent_name, skill_name = precondition_skill.split(".", 1)
+        else:
+            # Default to le_veilleur for precondition checks
+            agent_name = "le_veilleur"
+            skill_name = precondition_skill
+        
+        agent = self.agents.get(agent_name)
+        if not agent:
+            logger.warning(f"Precondition agent not found: {agent_name}")
+            return {"satisfied": True}  # Fail open if agent not found
+        
+        # Build check message
+        check_params = {
+            "student_id": user_id,
+            **params
+        }
+        
+        message = self._build_a2a_message(skill_name, user_id, check_params)
+        
+        try:
+            result = await self._send_to_agent(agent.url, message)
+            
+            # Interpret result as precondition check
+            if "has_pending" in result:
+                # check_pending skill
+                return {
+                    "satisfied": result.get("has_pending", False),
+                    "message": result.get("message", "No pending worksheet found"),
+                    "action_required": "generate_worksheet" if not result.get("has_pending") else None
+                }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Precondition check failed: {e}")
+            return {"satisfied": False, "message": str(e)}
+    
+    async def call_agent_skill(
+        self,
+        agent_name: str,
+        skill_id: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Directly call an agent's skill (for internal hub use).
+        
+        This bypasses user-callable checks, allowing hub logic
+        to call internal skills.
+        
+        Args:
+            agent_name: Name of the agent
+            skill_id: ID of the skill to invoke
+            params: Parameters for the skill
+            
+        Returns:
+            Result from the agent
+        """
+        agent = self.agents.get(agent_name)
+        if not agent:
+            raise ValueError(f"Agent not found: {agent_name}")
+        
+        message = self._build_a2a_message(skill_id, "hub", params)
+        return await self._send_to_agent(agent.url, message)
+    
+    def _build_a2a_message(
+        self,
+        skill_id: str,
+        user_id: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Build an A2A protocol message.
+        
+        Uses JSON-RPC 2.0 format with message/send method.
+        """
+        message_id = str(uuid.uuid4())
+        
+        return {
+            "jsonrpc": "2.0",
+            "id": message_id,
+            "method": "message/send",
+            "params": {
+                "message": {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "kind": "data",
+                            "data": {
+                                "skill": skill_id,
+                                "parameters": {
+                                    "user_id": user_id,
+                                    **params
+                                }
+                            }
+                        }
+                    ],
+                    "messageId": message_id,
+                    "kind": "message"
+                }
+            }
+        }
+    
+    async def _send_to_agent(
+        self,
+        agent_url: str,
+        message: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Send A2A message to an agent.
+        
+        Args:
+            agent_url: Agent's base URL
+            message: A2A message to send
+            
+        Returns:
+            Extracted result from agent response
+        """
+        try:
+            response = await self.client.post(
+                agent_url,
+                json=message,
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Extract result from A2A response
+            if "result" in data:
+                return self._extract_result(data["result"])
+            elif "error" in data:
+                raise Exception(f"Agent error: {data['error']}")
+            else:
+                return data
+                
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error calling agent: {e}")
+            raise
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON from agent: {e}")
+            raise
+    
+    def _extract_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract meaningful result from A2A response.
+        
+        A2A responses have artifacts with parts containing data.
+        """
+        # If result has artifacts, extract data from first artifact
+        if "artifacts" in result:
+            artifacts = result["artifacts"]
+            if artifacts and len(artifacts) > 0:
+                parts = artifacts[0].get("parts", [])
+                for part in parts:
+                    if part.get("kind") == "data":
+                        return part.get("data", {})
+        
+        # Otherwise return result as-is
+        return result
+    
+    async def close(self):
+        """Close the HTTP client"""
+        await self.client.aclose()
+
+
+============================================================
+FILE 12/14: requirements.txt
+LINES: 16
+============================================================
+
+# HubCore dependencies
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+httpx>=0.24.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+
+# Xmmersia dependencies (from GitHub)
+# xmmersia-agentcore @ git+https://github.com/Ayahualulco/Xmmersia-AgentCore.git@main
+# xmmersia-protocol @ git+https://github.com/Ayahualulco/Xmmersia-Protocol.git@main
+
+
+============================================================
+FILE 13/14: setup.py
+LINES: 37
+============================================================
+
+from setuptools import setup, find_packages
+
+setup(
+    name="xmmersia-hubcore",
+    version="1.0.0",
+    packages=find_packages(),
+    install_requires=[
+        "fastapi>=0.100.0",
+        "uvicorn[standard]>=0.22.0",
+        "httpx>=0.24.0",
+        "pydantic>=2.0.0",
+        "python-multipart>=0.0.6",
+    ],
+    extras_require={
+        "dev": [
+            "pytest>=7.0.0",
+            "pytest-asyncio>=0.21.0",
+            "pytest-cov>=4.0.0",
+        ]
+    },
+    python_requires=">=3.10",
+    author="Marc Santugini",
+    author_email="marc@xmmersia.com",
+    description="Foundation for all Xmmersia Hubs - unified interfaces for agent collaboration",
+    long_description=open("README.md", encoding="utf-8").read(),
+    url="https://github.com/Ayahualulco/Xmmersia-HubCore",
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+    ],
+)
+
+
+============================================================
+FILE 14/14: tests\test_base_hub.py
+LINES: 187
+============================================================
+
+"""
+Tests for HubCore BaseHub
+"""
+
+import pytest
+from typing import Dict, List
+from hubcore import BaseHub, HubConfig, SkillExposure, HubAction, UITheme
+
+
+class TestHub(BaseHub):
+    """Test implementation of BaseHub"""
+    
+    def configure(self) -> HubConfig:
+        return HubConfig(
+            name="Test Hub",
+            slug="test",
+            description="A test hub",
+            version="1.0.0"
+        )
+    
+    def register_agents(self) -> Dict[str, str]:
+        return {
+            "agent_a": "http://localhost:8001",
+            "agent_b": "http://localhost:8002"
+        }
+    
+    def define_skill_exposure(self) -> Dict[str, SkillExposure]:
+        return {
+            "agent_a": SkillExposure(
+                exposed=["skill_1", "skill_2"],
+                hidden=["skill_3"],
+                internal=["skill_4"]
+            ),
+            "agent_b": SkillExposure(
+                exposed=["skill_x"],
+                hidden=["skill_y"]
+            )
+        }
+    
+    def define_ui_actions(self) -> List[HubAction]:
+        return [
+            HubAction(
+                id="action_1",
+                label="Action One",
+                icon="🔥",
+                agent="agent_a",
+                skill="skill_1"
+            ),
+            HubAction(
+                id="action_2",
+                label="Action Two",
+                icon="💧",
+                agent="agent_b",
+                skill="skill_x"
+            )
+        ]
+
+
+def test_hub_creation():
+    """Test hub can be created"""
+    hub = TestHub()
+    assert hub.initialized == False
+    assert hub.config is None
+
+
+@pytest.mark.asyncio
+async def test_hub_initialization():
+    """Test hub initialization"""
+    hub = TestHub()
+    await hub.initialize()
+    
+    assert hub.initialized == True
+    assert hub.config.name == "Test Hub"
+    assert hub.config.slug == "test"
+    assert len(hub.agents) == 2
+    assert len(hub.actions) == 2
+
+
+@pytest.mark.asyncio
+async def test_hub_card():
+    """Test hub card generation"""
+    hub = TestHub()
+    await hub.initialize()
+    
+    card = hub.get_hub_card()
+    
+    assert card["name"] == "Test Hub"
+    assert card["slug"] == "test"
+    assert card["hubCoreVersion"] == "1.0.0"
+    assert len(card["agents"]) == 2
+    assert len(card["actions"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_skill_exposure():
+    """Test skill exposure rules"""
+    hub = TestHub()
+    await hub.initialize()
+    
+    agent_a = hub.agents["agent_a"]
+    
+    # Exposed skills are user callable
+    assert agent_a.skill_exposure.is_user_callable("skill_1") == True
+    assert agent_a.skill_exposure.is_user_callable("skill_2") == True
+    
+    # Hidden skills are not user callable
+    assert agent_a.skill_exposure.is_user_callable("skill_3") == False
+    
+    # Internal skills are hub callable but not user callable
+    assert agent_a.skill_exposure.is_user_callable("skill_4") == False
+    assert agent_a.skill_exposure.is_hub_callable("skill_4") == True
+
+
+@pytest.mark.asyncio
+async def test_health_check():
+    """Test health check"""
+    hub = TestHub()
+    
+    # Not initialized
+    health = await hub.health_check()
+    assert health["status"] == "not_initialized"
+    
+    # After initialization
+    await hub.initialize()
+    health = await hub.health_check()
+    
+    assert health["status"] == "healthy"
+    assert health["hub"] == "Test Hub"
+    assert "agents" in health
+
+
+def test_hub_config():
+    """Test HubConfig"""
+    config = HubConfig(
+        name="My Hub",
+        slug="my-hub",
+        description="My description",
+        version="2.0.0",
+        theme=UITheme.DARK,
+        course="CS 101"
+    )
+    
+    assert config.name == "My Hub"
+    assert config.theme == UITheme.DARK
+    assert config.auth_required == True  # Default
+    
+    d = config.to_dict()
+    assert d["theme"] == "dark"
+
+
+def test_skill_exposure_class():
+    """Test SkillExposure class"""
+    exposure = SkillExposure(
+        exposed=["a", "b"],
+        hidden=["c"],
+        internal=["d"]
+    )
+    
+    assert exposure.is_user_callable("a") == True
+    assert exposure.is_user_callable("c") == False
+    assert exposure.is_user_callable("d") == False
+    
+    assert exposure.is_hub_callable("a") == True
+    assert exposure.is_hub_callable("d") == True
+    assert exposure.is_hub_callable("c") == False
+    
+    assert exposure.all_available() == ["a", "b", "d"]
+
+
+def test_hub_action():
+    """Test HubAction"""
+    action = HubAction(
+        id="test",
+        label="Test Action",
+        icon="🧪",
+        agent="test_agent",
+        skill="test_skill",
+        precondition="check_something"
+    )
+    
+    assert action.id == "test"
+    assert action.precondition == "check_something"
+    
+    d = action.to_dict()
+    assert d["id"] == "test"
+    assert d["precondition"] == "check_something"

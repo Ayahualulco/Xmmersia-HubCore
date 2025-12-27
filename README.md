@@ -19,8 +19,8 @@ A **Hub** is a unified interface that brings together multiple Mates (agents) to
 - GASTON has chatbot, progress queries, worksheet orchestration
 
 **Hubs expose a curated subset** of agent skills:
-- Practice Hub exposes LUMIÈRE's `check_answers` but not `rubric_grade`
-- Practice Hub uses GASTON's chatbot internally but hides the chat interface
+- Training Hub exposes LUMIÈRE's `check_answers` but not `rubric_grade`
+- Training Hub uses GASTON's chatbot internally but hides the chat interface
 - Same agents, different hubs, different skill exposure
 
 ```
@@ -28,7 +28,7 @@ A **Hub** is a unified interface that brings together multiple Mates (agents) to
 │                    AGENT SKILLS vs HUB EXPOSURE                 │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  GASTON (Full Agent)         │  GASTON in Practice Hub          │
+│  GASTON (Full Agent)         │  GASTON in Training Hub          │
 │  ├── chatbot ✓               │  ├── request_worksheet ✅        │
 │  ├── request_worksheet ✓     │  ├── get_progress ✅             │
 │  ├── get_progress ✓          │  ├── download_work ✅            │
@@ -50,13 +50,13 @@ pip install xmmersia-hubcore
 ```python
 from hubcore import BaseHub, HubConfig, SkillExposure
 
-class PracticeHub(BaseHub):
+class TrainingHub(BaseHub):
     
     def configure(self) -> HubConfig:
         return HubConfig(
-            name="Practice Hub",
-            slug="practice",
-            description="Personalized derivative practice for ECON 3010",
+            name="Training Hub",
+            slug="training",
+            description="Personalized derivative training for ECON 3010",
             version="1.0.0"
         )
     
@@ -128,7 +128,7 @@ class PracticeHub(BaseHub):
 import asyncio
 
 async def main():
-    hub = PracticeHub()
+    hub = TrainingHub()
     await hub.initialize()
     # Hub is now ready to serve at configured URL
 
@@ -168,8 +168,8 @@ Configuration for hub behavior:
 ```python
 @dataclass
 class HubConfig:
-    name: str                    # "Practice Hub"
-    slug: str                    # "practice" -> xmmersia.com/practice
+    name: str                    # "Training Hub"
+    slug: str                    # "training" -> xmmersia.com/training
     description: str             # Shown to users
     version: str                 # Semantic version
     auth_required: bool = True   # Require login?
@@ -209,7 +209,7 @@ class HubAction:
 HubCore provides built-in patterns for auth and consent:
 
 ```python
-class PracticeHub(BaseHub):
+class TrainingHub(BaseHub):
     
     def configure_auth(self) -> AuthConfig:
         return AuthConfig(
@@ -221,7 +221,7 @@ class PracticeHub(BaseHub):
     def configure_consent(self) -> ConsentConfig:
         return ConsentConfig(
             required=True,
-            text="This optional tool uses AI to generate practice problems...",
+            text="This optional tool uses AI to generate training problems...",
             data_usage=["OpenAI for grading", "UVA Box for storage"],
             revocable=True
         )
@@ -257,7 +257,7 @@ Xmmersia-HubCore/
 │       ├── __init__.py
 │       └── hub_handler.py   # HTTP handler for hub endpoints
 ├── examples/
-│   └── practice_hub.py      # Practice Hub implementation
+│   └── training_hub.py      # Training Hub implementation
 ├── tests/
 │   ├── test_base_hub.py
 │   ├── test_skill_exposure.py
@@ -278,7 +278,7 @@ Xmmersia-HubCore/
 ## Success Criteria
 
 HubCore is successful when:
-1. ✅ Practice Hub successfully uses it
+1. ✅ Training Hub successfully uses it
 2. ✅ New hubs can be created in hours, not days
 3. ✅ Skill exposure works correctly (hidden skills stay hidden)
 4. ✅ Auth and consent flows work seamlessly
@@ -291,7 +291,7 @@ HubCore is successful when:
 │                     XMMERSIA STACK                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  HubCore        →  Unified interfaces (Practice Hub, etc.)      │
+│  HubCore        →  Unified interfaces (Training Hub, etc.)      │
 │       ↓                                                         │
 │  AgentCore      →  Agent patterns (BaseAgent, BaseSkill)        │
 │       ↓                                                         │
